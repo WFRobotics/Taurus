@@ -1,12 +1,14 @@
-/*----------------------------------------------------------------------------*/
-/* Copyright (c) FIRST 2008. All Rights Reserved.                             */
-/* Open Source Software - may be modified and shared by FRC teams. The code   */
-/* must be accompanied by the FIRST BSD license file in the root directory of */
-/* the project.                                                               */
-/*----------------------------------------------------------------------------*/
-
+// Declare our package (for organizational purposes)
 package edu.wpi.first.wpilibj.templates;
 
+// Import the necessary classes
+import com.taurus.CompressorPins;
+import com.taurus.ControlMapping;
+import com.taurus.Joysticks;
+import com.taurus.Logger;
+import com.taurus.SensorPins;
+import com.taurus.ServoPins;
+import com.taurus.SolenoidPins;
 import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.RobotDrive;
@@ -14,624 +16,514 @@ import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.Victor;
 import edu.wpi.first.wpilibj.camera.AxisCamera;
 import edu.wpi.first.wpilibj.DigitalInput;
-import edu.wpi.first.wpilibj.AnalogChannel;
 import edu.wpi.first.wpilibj.Solenoid;
-import edu.wpi.first.wpilibj.Compressor; 
-import edu.wpi.first.wpilibj.DriverStation; 
-import edu.wpi.first.wpilibj.Servo; 
-import edu.wpi.first.wpilibj.DriverStationLCD;
+import edu.wpi.first.wpilibj.Compressor;
+import edu.wpi.first.wpilibj.Servo;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.AnalogChannel;
 
 /**
- * The VM is configured to automatically run this class, and to call the
- * functions corresponding to each mode, as described in the IterativeRobot
- * documentation. If you change the name of this class or the package after
- * creating this project, you must also update the manifest file in the resource
- * directory.
+ * This is a cleaner robot class. It's probably not the best idea to put our
+ * robot into a wpilibj package. I like abstraction, organization, and comments.
+ * Use what you want, I only rewrote this because I wanted to program some java.
+ * Not expecting this to be extra useful.
+ *
+ * @author Tanner Danzey < arkaniad AT gmail DOT com>
  */
-public class RobotTemplate extends IterativeRobot 
-{
-    ///////////////////////////////////////////////////////
-    //  PRIVATE VARIABLES
-    ///////////////////////////////////////////////////////
-    /* Motor Objects */
+public class RobotTemplate extends IterativeRobot {
+    //---------
+    //Variables
+    //---------
+
+    // Motor Objects
     private RobotDrive chassis;
     private Victor grabberMotor;
     private boolean driveFacing;
     
-    // solenoid //
-    public Solenoid tFiringArmOut;
-    public Solenoid tFiringArmIn;
-    public Solenoid tLoadingPinIn;
-    public Solenoid tLoadingPinOut;
-    public Solenoid armOut;
-    public Solenoid armIn;
-    
-    /* Left Joystick Setup */
-    private Joystick leftStick;
-    private final int shooterButton = 1;
-    private final int grabberForwardButton = 2;
-    private final int grabberReverseButton = 3;
-    private int servoRight = 5; 
-    private int servoLeft = 4;         
-    private int safetyReleaseButtonL = 8; 
-    private int safetyLatchButtonL = 9; 
-    
-    /* Right Joystick Setup */
-    private Joystick rightStick;
-    private final int shooterButtonSafety = 1;
-    private final int armOutControlButton = 3;
-    private final int armInControlButton = 2;
-    private final int driveControlForwardButton = 4;
-    private final int driveControlBackwardButton = 5;
-    private int safetyReleaseButtonR = 8; 
-    private int safetyLatchButtonR = 9; 
+    // Solenoid Objects
+    private Solenoid tFiringArmOut; // These four are firing mechanisms
+    private Solenoid tFiringArmIn;
+    private Solenoid tLoadingPinIn;
+    private Solenoid tLoadingPinOut;
+    private Solenoid tGrabberArmOut;        // These two are for the grabber
+    private Solenoid tGrabberArmIn;
 
-   
-    private final double grabberSpeed = 1.0;
-   
-    private AnalogChannel ultraSonic;
-    private double ultraSonicSignal;
-    private DriverStationLCD DriverLCD; 
-    
-    /* Shooter */
-    private DigitalInput armSensorR;
-    private DigitalInput armSensorL;
-    private DigitalInput armPistonL;
-    private DigitalInput armPistonR;
-    private DigitalInput latchSensor;
-    
-    //private final boolean firingArm = false;
-    //private final boolean loadingPin = false;
-    //private boolean previousCompressorState = false;
-    private boolean firingReady = false;
-    private final double timingDelay = 0.5;
+    // Joysticks
+    // TODO Split into an enumeration
+    private Joystick leftStick;
+    private Joystick rightStick;
+
+    // State machine states
+    private final int stShooterStart = 0,
+            stShooterRetractFiringPin = 1,
+            stShooterRetractFiringPinWait = 2,
+            stShooterSetFiringArm = 3,
+            stShooterSetFiringArmWait = 4,
+            stShooterSetFiringPin = 5,
+            stShooterSetFiringPinWait = 6,
+            stShooterRetractFiringMech = 7,
+            stShooterRetractFiringMechWait = 8,
+            stShooterSafety = 9,
+            stShooterSafetyLatch = 10,
+            stShooterSafetyRetract = 11,
+            stShooterFireReady = 12,
+            stShooterFireWait = 13;
+
+    private final int stAutoStart = 0,
+            stAutoArmRetracting = 1,
+            stAutoMoveToPosition = 2,
+            stAutoMoveToPositionWait = 3,
+            stAutoFire = 4,
+            stAutoFireWait = 5,
+            stAutoMove = 6,
+            stAutoMoveWait = 7,
+            stAutoDone = 8;
+
+    // Shooter
+    private DigitalInput sArmL; // Sensors for the shooter state machine
+    private DigitalInput sArmR;
+    private DigitalInput sPistonL;
+    private DigitalInput sPistonR;
+    private DigitalInput sLatch;
     private Compressor compressor;
-    
-    /* Camera */
+    private int currentShooterState = 0;
+    private int newShooterState = 0;
+    private double shooterTime = 0;
+    private double safetyTime = 0;
+
+    // Autonomous
+    private int currentAutoState = 0;
+    private int newAutoState = 0;
+    private double autoTime = 0;
+
+    // Camera
     private AxisCamera camera;
     private final String cameraIP = "10.48.18.11";
     private DriverStation driverStation;
-    private Servo camServo;
-    private  double servoVertical = .5;
-    
-    ///////////////////////////////////////////////////////
-    //  PUBLIC METHODS
-    ///////////////////////////////////////////////////////
+    private Servo servoCamera;
+    private double servoVertical = .5;
+
+    // Ultrasonic
+    private AnalogChannel sSonic;
+    private double sonicSignal;
+
+    // Constants
+    boolean motorInverted = true;
+
+    // Delay Constants
+    private final double shooterWaitPin = 2.0,
+            shooterWaitFire = 2.0,
+            autoWaitPosition = 2.0,
+            autoWaitFire = 2.0,
+            autoWaitMove = 2.0;
+
+    // Speed Constants
+    private final double speedStop = 0.0;
+    private final double speedGrabberOn = 1.0;
+    private final double speedMotorOn = 1.0;
+
+    // Logger
+    private Logger log;
+
     /**
-     * This function is run when the robot is first started up and should be
-     * used for any initialization code.
+     * This method is the first to run once the code starts up.
      */
-    public void robotInit() 
-    {
-        
-        // Initialize Objects
-        chassis = new RobotDrive(1, 2, 3, 4);
-        grabberMotor = new Victor(5);
-        
-        leftStick = new Joystick(1);
-        rightStick = new Joystick(2);
-        
-        //    Firing arm
-        armSensorL = new DigitalInput(2);
-        armSensorR = new DigitalInput(3);
-        armPistonL = new DigitalInput(4);
-        armPistonR = new DigitalInput(5);
-        latchSensor = new DigitalInput(6);
-        tFiringArmIn  = new Solenoid(1);
-        tFiringArmOut = new Solenoid(2);
-        tLoadingPinIn = new Solenoid(3);
-        tLoadingPinOut  = new Solenoid(4);
-        armOut = new Solenoid(5);
-        armIn = new Solenoid(6);
-       
-      
-        compressor = new Compressor(1,1);             
-        
-        camera = AxisCamera.getInstance(cameraIP);
-        camServo = new Servo(7); 
-        ultraSonic = new AnalogChannel(1);
-        DriverLCD.getClass(); 
-        driverStation = DriverStation.getInstance();
-        // Inverting the Front left motor for driving
-        //chassis.setInvertedMotor(RobotDrive.MotorType.kFrontLeft, true);
-        // Retracting the shooter into position
-        //RetractShooter(); Later implementation
-        // Add this in for 4WD
-        chassis.setInvertedMotor(RobotDrive.MotorType.kRearLeft, true);
-        
+    public void robotInit() {
+        log = new Logger("[Core]", System.out);
+        log.info("Initializing main systems...");
+        initMotors();
+        initSensors();
+        initPneumatics();
+        initDrive();
+        initUltrasonic();
+        initCamera();
+        log.info("Initialization complete.");
     }
-    
+
     /**
-     * This function is called at the start of operator mode.
+     * this method starts when operator mode is enabled.
      */
-    public void teleopInit()
-    {
-        chassis.setMaxOutput(.5);
+    public void teleopInit() {
+        log.info("Entering teleoperated mode. Activating controls.");
         chassis.setSafetyEnabled(true);
         chassis.tankDrive(leftStick, rightStick);
         
     }
-     
+
     /**
-     * This function is called periodically during operator control
+     * This function is ran in a loop during operator control.
      */
     public void teleopPeriodic() 
-    {
-        
         chassis.tankDrive(leftStick, rightStick);
-        compressorControl();
-        ShooterStateMachine(false);
-        GrabberArmControls(false);
-        driveControls();
-        ServoControl();
-        UltraSonicControl();
+        compressorTick();
+        shooterStateTick(false);
+        grabberStateTick(false);
+        driveControlTick();
+        servoTick();
+        ultrasoundTick();
     }
 
     /**
-     * This function is called periodically during autonomous
+     * This function is called periodically during autonomous mode.
      */
-    private final int AutoStateStart =                   0;
-    private final int AutoStateArmRetracting =           1;
-    private final int AutoStateMoveToPosition =          3;
-    private final int AutoStateMoveToPositionWait =      4;
-    private final int AutoStateFireShooter =             5;
-    private final int AutoStateFireShooterWait =         6;
-    private final int AutoStateMove =                    7;
-    private final int AutoStateMoveWait =                8;
-    private final int AutoStateDone =                    9;
-    
-    private int currentAutoState = AutoStateStart;
-    private int newAutoState = AutoStateStart;
-    private double autoTime = 0;
-    private final int AUTO_MOVE_TO_POSITION_TIME = 2;
-    private final int AUTO_SHOOTER_WAIT_TIME = 2;
-    private final int AUTO_MOVE_TIME = 2;
-    public void autonomousPeriodic() 
-    {
+    public void autonomousPeriodic() {
+        autonomousTick();
+    }
+   
+    /**
+     * This function is called periodically during test mode.
+     */
+    public void testPeriodic() {
+
+    }
+
+    //------------------
+    // Private Functions
+    //------------------
+
+    /**
+     * This function manages the state machine for the shooter arm.
+     */
+    private void shooterStateTick(boolean autonomous) {
+        switch (currentShooterState) {
+            case stShooterStart: {
+                if (autonomous) {
+                    log.info("Shooter in autonomous starting state.");
+                    if (sLatch.get()) {
+                        if (sArmL.get() && sArmR.get()) {
+                            newShooterState = stShooterSetFiringPin;
+                        } else {
+                            newShooterState = stShooterSetFiringArm;
+                        }
+                    } else {
+                        if (sArmL.get() && sArmR.get()) {
+                            newShooterState = stShooterRetractFiringMech;
+                        } else {
+                            newShooterState = stShooterRetractFiringPin;
+                        }
+                    }
+                } else {
+                    log.info("Shooter in starting state.");
+                    newShooterState = stShooterRetractFiringPin;
+                }
+                break;
+            }
+            case stShooterRetractFiringPin: {
+                log.info("Retracting firing pin...");
+                tLoadingPinIn.set(false);
+                tLoadingPinOut.set(true);
+                shooterTime = Timer.getFPGATimestamp();
+                newShooterState = stShooterRetractFiringPinWait;
+                break;
+            }
+            case stShooterRetractFiringPinWait: {
+                if (Timer.getFPGATimestamp() - shooterTime >= shooterWaitPin) {
+                    log.info("Firing pin retracted.");
+                    newShooterState = stShooterSetFiringArm;
+                }
+                break;
+            }
+            case stShooterSetFiringArm: {
+                log.info("Setting firing arm...");
+                tFiringArmIn.set(false);
+                tFiringArmOut.set(true);
+                shooterTime = Timer.getFPGATimestamp();
+                newShooterState = stShooterSetFiringArmWait;
+                break;
+            }
+            case stShooterSetFiringArmWait: {
+                if (sArmR.get() && sArmL.get()) {
+                    newShooterState = stShooterSetFiringPin;
+                }
+                if (leftStick.getRawButton(ControlMapping.latchLeft) && rightStick.getRawButton(ControlMapping.latchRight)) {
+                    newShooterState = stShooterSetFiringPin;
+                }
+                break;
+            }
+            case stShooterSetFiringPin: {
+                log.info("Setting firing pin...");
+                tLoadingPinOut.set(false);
+                tLoadingPinIn.set(true);
+                shooterTime = Timer.getFPGATimestamp();
+                newShooterState = stShooterSetFiringPinWait;
+                break;
+            }
+            case stShooterSetFiringPinWait: {
+                if (Timer.getFPGATimestamp() - shooterTime >= shooterWaitPin) {
+                    log.info("Firing pin set.");
+                    newShooterState = stShooterRetractFiringMech;
+                }
+                break;
+            }
+            case stShooterRetractFiringMech: {
+                log.info("Retracting firing mechanism...");
+                tFiringArmOut.set(false);
+                tFiringArmIn.set(true);
+                shooterTime = Timer.getFPGATimestamp();
+                newShooterState = stShooterRetractFiringMechWait;
+                break;
+            }
+            case stShooterRetractFiringMechWait: {
+                if (sPistonL.get() && sPistonR.get()) {
+                    log.info("Firing mechanism set.");
+                    newShooterState = stShooterFireReady;
+                }
+                break;
+            }
+            case stShooterSafety: {
+                tFiringArmIn.set(false);
+                tFiringArmOut.set(true);
+                safetyTime = Timer.getFPGATimestamp();
+                newShooterState = stShooterSafetyLatch;
+                break;
+            }
+            case stShooterSafetyRetract: {
+                tFiringArmOut.set(false);
+                tFiringArmIn.set(true);
+                newShooterState = stShooterStart;
+                break;
+            }
+            case stShooterFireReady: {
+                if (leftStick.getRawButton(ControlMapping.fireLeft)
+                        && rightStick.getRawButton(ControlMapping.fireRight)) {
+                    log.info("Firing shooter!");
+                    tLoadingPinIn.set(false);
+                    tLoadingPinOut.set(true);
+                    shooterTime = Timer.getFPGATimestamp();
+                    newShooterState = stShooterFireWait;
+                } else if (autonomous && currentAutoState == stAutoFire) {
+                    tLoadingPinIn.set(false);
+                    tLoadingPinOut.set(true);
+                    shooterTime = Timer.getFPGATimestamp();
+                    newShooterState = stShooterFireWait;
+                }
+                if (leftStick.getRawButton(ControlMapping.releaseLeft) && rightStick.getRawButton(ControlMapping.releaseRight)) {
+                    newShooterState = stShooterSafety;
+                }
+                break;
+            }
+            case stShooterFireWait: {
+                if (Timer.getFPGATimestamp() - shooterTime >= shooterWaitFire) {
+                    log.info("Reloading shooter.");
+                    newShooterState = stShooterStart;
+                }
+                break;
+            }
+            default: {
+                log.error("Shooter should never be in this state. SOS.");
+                break;
+            }
+        }
+        currentShooterState = newShooterState;
+    }
+
+    /**
+     * This function manages the state machine for the grabber arm
+     */
+    private void grabberStateTick(boolean autonomous) {
+        if (rightStick.getRawButton(ControlMapping.grabberArmDown) && rightStick.getRawButton(ControlMapping.grabberArmUp)) {
+            // If both buttons are pressed, report an error.
+            log.error("Too many buttons pressed, grabber arm cannot exist in two positions simultaneously!");
+            tGrabberArmOut.set(false);
+            tGrabberArmIn.set(true);
+        } else if (rightStick.getRawButton(ControlMapping.grabberArmDown) || autonomous) {
+            log.info("Arm extended.");
+            tGrabberArmOut.set(true);
+            tGrabberArmIn.set(false);
+        } else if (rightStick.getRawButton(ControlMapping.grabberArmUp)) {
+            log.info("Arm retracted.");
+            tGrabberArmOut.set(false);
+            tGrabberArmIn.set(true);
+        }
+
+        if (leftStick.getRawButton(ControlMapping.grabberMotorForward) && leftStick.getRawButton(ControlMapping.grabberMotorReverse)) {
+            log.error("Too many buttons pressed, grabber motor cannot exist in two states!");
+            grabberMotor.set(0.0);
+        } else if (leftStick.getRawButton(ControlMapping.grabberMotorForward)) {
+            log.info("Grabber motor forward");
+            grabberMotor.set(speedGrabberOn);
+        } else if (leftStick.getRawButton(ControlMapping.grabberMotorReverse)) {
+            log.info("Grabber motor reverse");
+            grabberMotor.set(-speedGrabberOn);
+        } else {
+            grabberMotor.set(speedStop);
+        }
+    }
+
+    /**
+     * This function manages the compressor.
+     */
+    private void compressorTick() {
+        // If the tank is low on pressure, stop it. Otherwise make sure its on.
+        if (!compressor.getPressureSwitchValue()) {
+            compressor.start();
+        } else {
+            compressor.stop();
+        }
+    }
+
+    /**
+     * This function manages the control facing switch
+     */
+    private void driveControlTick() {
+        // TODO reversed controls
+    }
+
+    /**
+     * This function controls the robot in autonomous mode.
+     */
+    private void autonomousTick() {
         chassis.setSafetyEnabled(false);
-        compressorControl();
-        switch (currentAutoState)
-        {
-            case AutoStateStart:
-            {    
-                newAutoState = AutoStateArmRetracting;
-            break;
-            }
-            case AutoStateArmRetracting:
-            {
-                GrabberArmControls(true);
-                newAutoState = AutoStateMoveToPosition;
-               break;
-            }
-            case AutoStateMoveToPosition:
-            {
-                chassis.drive(1, 0);
-                autoTime = Timer.getFPGATimestamp();
-                newAutoState = AutoStateMoveToPositionWait;
-                ShooterStateMachine(true);
+        compressorTick();
+        switch (currentAutoState) {
+            case stAutoStart: {
+                newAutoState = stAutoArmRetracting;
                 break;
             }
-            case AutoStateMoveToPositionWait:
-            {
-                 if (Timer.getFPGATimestamp() - autoTime >= AUTO_MOVE_TO_POSITION_TIME)
-                {
-                    chassis.drive(0, 0);
-                    newAutoState = AutoStateFireShooter;
-                }
-                 ShooterStateMachine(true);
-                if ((Timer.getFPGATimestamp() - autoTime >= AUTO_MOVE_TO_POSITION_TIME)&& 
-                        (currentReloadShooterState == ShooterStateFireReady)){
-                    newAutoState = AutoStateFireShooter;
-                }
-                 break;
-            }
-            case AutoStateFireShooter:
-            {
-                 ShooterStateMachine(true);
-                 newAutoState = AutoStateFireShooterWait;
-                 autoTime = Timer.getFPGATimestamp();
-                 break;
-            }
-            case AutoStateFireShooterWait:
-            {
-                 if (Timer.getFPGATimestamp() - autoTime >= AUTO_SHOOTER_WAIT_TIME)
-                {
-                    
-                    newAutoState = AutoStateMove;
-                }
-                 break;
-            }
-            case AutoStateMove:
-            {
-                chassis.drive(1, 0);
-                autoTime = Timer.getFPGATimestamp();
-                newAutoState = AutoStateMoveWait;
+            case stAutoArmRetracting: {
+                log.info("Retracting arm");
+                grabberStateTick(true);
+                newAutoState = stAutoMoveToPosition;
                 break;
             }
-            case AutoStateMoveWait:
-            {
-                 if (Timer.getFPGATimestamp() - autoTime >= AUTO_MOVE_TIME)
-                {
-                    chassis.drive(0, 0);
-                    newAutoState = AutoStateDone;
-                }
-                 break;
+            case stAutoMoveToPosition: {
+                log.info("Moving into firing position.");
+                chassis.drive(speedMotorOn, 0);
+                autoTime = Timer.getFPGATimestamp();
+                newAutoState = stAutoMoveToPositionWait;
+                shooterStateTick(true);
+                break;
             }
-            case AutoStateDone:
-            {
-                
+            case stAutoMoveToPositionWait: {
+                if (Timer.getFPGATimestamp() - autoTime >= autoWaitPosition) {
+                    chassis.drive(speedStop, 0);
+                }
+                shooterStateTick(true);
+                if (Timer.getFPGATimestamp() - autoTime >= autoWaitPosition
+                        && currentShooterState == stShooterFireReady) {
+                    //TODO Fix this magic number
+                    newAutoState = stAutoFire;
+                }
+                break;
+            }
+            case stAutoFire: {
+                log.info("Firing!");
+                shooterStateTick(true);
+                newAutoState = stAutoFireWait;
+                autoTime = Timer.getFPGATimestamp();
+                break;
+            }
+            case stAutoFireWait: {
+                if (Timer.getFPGATimestamp() - autoTime >= autoWaitFire) {
+                    newAutoState = stAutoMove;
+                }
+                break;
+            }
+            case stAutoMove: {
+                log.info("Moving after firing..");
+                chassis.drive(speedMotorOn, 0);
+                autoTime = Timer.getFPGATimestamp();
+                newAutoState = stAutoMoveWait;
+                break;
+            }
+            case stAutoMoveWait: {
+                if (Timer.getFPGATimestamp() - autoTime >= autoWaitMove) {
+                    chassis.drive(speedStop, 0);
+                    newAutoState = stAutoDone;
+                }
+                break;
+            }
+            case stAutoDone: {
                 break;
             }
         }
         currentAutoState = newAutoState;
-
-// Drive forward out of the zone and stop
-       
-        
-       
-        
-    }
-   
-    /**
-     * This function is called periodically during test mode
-     */
-    public void testPeriodic() 
-    {
-    
-    }
-    
-    public void driveControls()
-    {
-      if(rightStick.getRawButton(driveControlBackwardButton) && rightStick.getRawButton(driveControlForwardButton)) 
-        {
-            System.out.println("error");
-            chassis.setInvertedMotor(RobotDrive.MotorType.kRearLeft, true);
-        }
-        else if (rightStick.getRawButton(driveControlBackwardButton)) 
-        {
-            chassis.setInvertedMotor(RobotDrive.MotorType.kRearLeft, false);
-            chassis.setInvertedMotor(RobotDrive.MotorType.kRearRight, true);
-            chassis.setInvertedMotor(RobotDrive.MotorType.kFrontLeft, false);
-            chassis.setInvertedMotor(RobotDrive.MotorType.kFrontRight, true);
-        }
-        else if(rightStick.getRawButton(driveControlForwardButton))
-        {
-            chassis.setInvertedMotor(RobotDrive.MotorType.kRearLeft, true);
-            chassis.setInvertedMotor(RobotDrive.MotorType.kRearRight, false);
-            chassis.setInvertedMotor(RobotDrive.MotorType.kFrontLeft, true);
-            chassis.setInvertedMotor(RobotDrive.MotorType.kFrontRight, false);
-        }
-        else 
-        {
-            // Do nothing 
-        }
-    }
-    ///////////////////////////////////////////////////////
-    //  PRIVATE METHODS
-    ///////////////////////////////////////////////////////
-     /**
-     * DESCRIPTION: Operate the shooter when the shooter button
-     *              is pressed.
-     * ARGUMENTS:   None.
-     */
-    
-    
-    private final int ShooterStateStart =                   0;
-    private final int ShooterStateRetractFiringPin =        1;
-    private final int ShooterStateRetractFiringPinWait =    2;
-    private final int ShooterStateSetFiringArm =            3;
-    private final int ShooterStateSetFiringArmWait =        4;
-    private final int ShooterStateSetFiringPin =            5;
-    private final int ShooterStateSetFiringPinWait =        6;
-    private final int ShooterStateRetractFiringMech =       7;
-    private final int ShooterStateRetractFiringMechWait =   8;
-    private final int ShooterStateSafety =                  9;
-    private final int ShooterStateSafetyLatch =             10;
-    private final int ShooterStateSafetyretrack =           11;
-    private final int ShooterStateFireReady =               12;
-    private final int ShooterStateFireWait =                13;
-    
-    private int currentReloadShooterState = ShooterStateStart;
-    private int newReloadShooterState = ShooterStateStart;
-    
-    private double shooterTime = 0;
-    private double safetyTime = 2;
-    
-    //private final int FIRING_ARM_WAIT = 10;
-    private final int LOADING_PIN_WAIT = 1;
-    private final int FIRING_WAIT = 1;
-    
-    /**
-     * DESCRIPTION: Activate the controls for the 
-     *              shooter.
-     * ARGUMENTS:   None.
-     */
-    private void ShooterStateMachine(boolean autoMode)
-    {
-        switch(currentReloadShooterState)
-        {
-            case ShooterStateStart:
-            {
-                if (autoMode == true)
-                {
-                    if (latchSensor.get())
-                    {
-                        if (armSensorL.get() && armSensorR.get())
-                        {
-                            newReloadShooterState = ShooterStateSetFiringPin;
-                        }
-                        else 
-                        {
-                            newReloadShooterState = ShooterStateSetFiringArm;
-                        }
-                       
-                    }
-                    else
-                    {
-                         if (armSensorL.get() && armSensorR.get())
-                        {
-                            newReloadShooterState = ShooterStateRetractFiringMech;
-                        }
-                        else 
-                        {
-                            newReloadShooterState = ShooterStateRetractFiringPin;
-                        }
-                    }
-                }
-                else
-                {
-                //System.out.println("reloadShooterStateMachine: ShooterStateStart");
-                newReloadShooterState = ShooterStateRetractFiringPin;
-                }
-                break;
-            }
-            case ShooterStateRetractFiringPin:
-            {
-                //System.out.println("reloadShooterStateMachine: ShooterStateRetractFiringPin");
-                tLoadingPinIn.set(false);
-                tLoadingPinOut.set(true);
-                shooterTime = Timer.getFPGATimestamp();
-                newReloadShooterState = ShooterStateRetractFiringPinWait;
-                break;
-            }
-            case ShooterStateRetractFiringPinWait:
-            {
-                //System.out.println("reloadShooterStateMachine: ShooterStateRetractFiringPinWait");
-                if (Timer.getFPGATimestamp() - shooterTime >= LOADING_PIN_WAIT)
-                {
-                    newReloadShooterState = ShooterStateSetFiringArm;
-                }
-                break;
-            }
-            case ShooterStateSetFiringArm:
-            {
-                //System.out.println("reloadShooterStateMachine: ShooterStateSetFiringArm");
-                tFiringArmIn.set(false);
-                tFiringArmOut.set(true);
-                shooterTime = Timer.getFPGATimestamp();
-                newReloadShooterState = ShooterStateSetFiringArmWait;
-                break;
-            }
-            case ShooterStateSetFiringArmWait:
-            {
-               // System.out.println("reloadShooterStateMachine: ShooterStateSetFiringArmWait");
-                if (armSensorR.get()&& armSensorL.get())
-                {
-                    newReloadShooterState = ShooterStateSetFiringPin;
-                }
-                if (leftStick.getRawButton(safetyLatchButtonL) && rightStick.getRawButton(safetyLatchButtonR))
-                {
-                     newReloadShooterState = ShooterStateSetFiringPin;
-                }
-                break;
-            }
-            case ShooterStateSetFiringPin:
-            {
-               // System.out.println("reloadShooterStateMachine: ShooterStateSetFiringPin");
-                tLoadingPinOut.set(false);
-                tLoadingPinIn.set(true);
-                safetyTime = Timer.getFPGATimestamp();
-                newReloadShooterState = ShooterStateSetFiringPinWait;
-                break;
-            }
-            case ShooterStateSetFiringPinWait:
-            {
-                if (Timer.getFPGATimestamp() - shooterTime >= LOADING_PIN_WAIT)
-                {
-                    newReloadShooterState = ShooterStateRetractFiringMech;
-                }
-                break;
-            }
-            case ShooterStateRetractFiringMech:
-            {
-                //System.out.println("reloadShooterStateMachine: ShooterStateRetractFiringMech");
-                tFiringArmOut.set(false);
-                tFiringArmIn.set(true);
-                shooterTime = Timer.getFPGATimestamp();
-                newReloadShooterState = ShooterStateRetractFiringMechWait;
-                break;
-            }
-            case ShooterStateRetractFiringMechWait:
-            {
-                //System.out.println("reloadShooterStateMachine: ShooterStateRetractFiringMechWait");
-                if (armPistonL.get() && armPistonR.get())
-                {
-                    newReloadShooterState = ShooterStateFireReady;
-                }
-             
-                break;
-            }
-            case ShooterStateSafety:
-            {
-               
-                tFiringArmIn.set(false);
-                tFiringArmOut.set(true);
-                safetyTime = Timer.getFPGATimestamp();
-                newReloadShooterState = ShooterStateSafetyLatch;
-                
-                break;
-            }
-            case ShooterStateSafetyLatch:
-            {
-                if (Timer.getFPGATimestamp() - safetyTime >= LOADING_PIN_WAIT)
-                {
-                    tLoadingPinIn.set(false);
-                 tLoadingPinOut.set(true);
-                newReloadShooterState = ShooterStateSafetyretrack;
-                }  
-                break;
-            }
-            case ShooterStateSafetyretrack:
-            {
-                tFiringArmOut.set(false);
-                tFiringArmIn.set(true);
-                newReloadShooterState = ShooterStateStart;
-                break;
-            }
-            case ShooterStateFireReady:
-            {
-                //System.out.println("reloadShooterStateMachine: ShooterStateFireReady");
-                if(leftStick.getRawButton(shooterButton) && rightStick.getRawButton(shooterButtonSafety))
-                {
-                    tLoadingPinIn.set(false);
-                    tLoadingPinOut.set(true);
-                    shooterTime = Timer.getFPGATimestamp();
-                    newReloadShooterState = ShooterStateFireWait;
-                } 
-                else if ((autoMode == true)&& ( currentAutoState == AutoStateFireShooter))
-                {
-                   
-                    tLoadingPinIn.set(false);
-                    tLoadingPinOut.set(true);
-                    shooterTime = Timer.getFPGATimestamp();
-                    newReloadShooterState = ShooterStateFireWait;
-                }
-                   if (leftStick.getRawButton(safetyReleaseButtonL) && rightStick.getRawButton(safetyReleaseButtonR))
-                {
-                    newReloadShooterState = ShooterStateSafety;
-                }    
-                    
-                break;
-            }
-            case ShooterStateFireWait:
-            {
-                if (Timer.getFPGATimestamp() - shooterTime >= FIRING_WAIT)
-                {
-                    newReloadShooterState = ShooterStateStart;
-                }
-            }
-            default:
-            {
-                System.out.println("reloadShooterStateMachine: default - ERROR - Should not get here");
-                break;
-            }
-            
-        }
-        currentReloadShooterState = newReloadShooterState;
-    }
-    
-    /**
-     * DESCRIPTION: Activate the controls for shooting the 
-     *              ball.
-     * ARGUMENTS:   None.
-     */
-    private void fireShooter() 
-    {
-        System.out.println("[--] Firing!");
-        firingReady = false;
-        //tFiringArm.set(true); //Release the firing arm
-        Timer.delay(timingDelay); //Wait just a little bit
-        //reloadShooter();
     }
 
     /**
-     * DESCRIPTION: Activates the grabber motor for grabbing
-     *              a ball when the grabber button is pressed.
-     * ARGUMENTS:   None.
+     * Initialize the motor subsystem.
      */
-    private void GrabberArmControls(boolean autoMode) 
-    {
-        if(rightStick.getRawButton(armOutControlButton) && rightStick.getRawButton(armInControlButton)) 
-        {
-           // if both buttons are pressed report error
-           System.out.println("error");
-           armOut.set(false);
-           armIn.set(true);
-        }
-        else if (rightStick.getRawButton(armOutControlButton)|| (autoMode == true)) 
-        {
-           System.out.println("Arm Out/n");
-           armOut.set(true);
-           armIn.set(false);
-        }
-        else if(rightStick.getRawButton(armInControlButton))
-        {
-            System.out.println("Arm In/n");
-            armOut.set(false);
-            armIn.set(true);
-        }
-        else 
-        {
-            // Do nothing 
-        }
-        
-        if(leftStick.getRawButton(grabberForwardButton) && leftStick.getRawButton(grabberReverseButton))
-        {
-           System.out.println("Error/n");
-            grabberMotor.set(0.0);
-        }
-        else if (leftStick.getRawButton(grabberForwardButton))
-        {
-            System.out.println("Grabber Forward/n");
-            grabberMotor.set(grabberSpeed); 
-        }
-        else if (leftStick.getRawButton(grabberReverseButton))
-        {
-            System.out.println("Grabber Reverse /n");
-            grabberMotor.set(-grabberSpeed);
-        }
-        else
-        { 
-            grabberMotor.set(0.0);
-        }
-    }
-   private void ServoControl()
-    {
-       if (leftStick.getRawButton(servoLeft))
-       {
-           servoVertical = servoVertical + .1; 
-       }
-       else if (leftStick.getRawButton(servoRight))
-       {
-          servoVertical = servoVertical - .1; 
-       }
-       
-       camServo.set(servoVertical);  
-       
-    }
-    
-    
-    
-    private void compressorControl(){
-        
-        if(!compressor.getPressureSwitchValue()  )
-        {
-            compressor.start();
-        }
-        else
-        {
-            compressor.stop();
-        }
-         
-    }
-    private void UltraSonicControl()
-    {
-       ultraSonic.getAverageVoltage();
-       ultraSonicSignal = ultraSonic.getAverageVoltage();
-       ultraSonicSignal = ( ultraSonicSignal* 100)/9.8 ;
-       DriverLCD.println(DriverStationLCD.Line.kUser1, 1, String.valueOf(2.0));
-    
+    private void initMotors() {
+        log.info("Initializing motors...");
+        chassis = new RobotDrive(1, 2, 3, 4); // Initialize all four drive motors
+        grabberMotor = new Victor(5); // Initialize the grabber motor
+        chassis.setInvertedMotor(RobotDrive.MotorType.kRearLeft, motorInverted);
+        chassis.setMaxOutput(sensitivity);
     }
 
+    /**
+     * Initialize the sensor subsystem.
+     */
+    private void initSensors() {
+        log.info("Initializing sensors...");
+        sArmL = new DigitalInput(SensorPins.armSensorLeft);
+        sArmR = new DigitalInput(SensorPins.armSensorRight);
+        sPistonL = new DigitalInput(SensorPins.armPistonLeft);
+        sPistonR = new DigitalInput(SensorPins.armPistonRight);
+        sLatch = new DigitalInput(SensorPins.latch);
+    }
+
+    /**
+     * Initialize the pneumatics subsystem.
+     */
+    private void initPneumatics() {
+        log.info("Initializing solenoids...");
+        tFiringArmIn = new Solenoid(SolenoidPins.firingArmIn);
+        tFiringArmOut = new Solenoid(SolenoidPins.firingArmOut);
+        tLoadingPinIn = new Solenoid(SolenoidPins.loadingPinIn);
+        tLoadingPinOut = new Solenoid(SolenoidPins.loadingPinOut);
+        tGrabberArmIn = new Solenoid(SolenoidPins.grabberArmIn);
+        tGrabberArmOut = new Solenoid(SolenoidPins.grabberArmOut);
+        log.info("Initializing compressor...");
+        compressor = new Compressor(CompressorPins.relay,
+                CompressorPins.pressure);
+    }
+
+    /**
+     * Initialize the drive subsystem.
+     */
+    private void initDrive() {
+        log.info("Initializing drive subsystem...");
+        leftStick = new Joystick(Joysticks.left);
+        rightStick = new Joystick(Joysticks.right);
+        chassis.tankDrive(leftStick, rightStick);
+    }
+
+    /**
+     * Initialize the camera servos
+     */
+    private void initCamera() {
+        log.info("Initializing camera servo...");
+        servoCamera = new Servo(ServoPins.cameraServo);
+    }
+
+    /**
+     * Initialize ultrasonic system
+     */
+    private void initUltrasonic() {
+        log.info("Initializing ultrasonic sensor...");
+        sSonic = new AnalogChannel(1);
+    }
+
+    /**
+     * This control manages the servos for the camera.
+     */
+    private void servoTick() {
+        if (leftStick.getRawButton(ControlMapping.camUp)) {
+            servoVertical = servoVertical + .1;
+        } else if (leftStick.getRawButton(ControlMapping.camDown)) {
+            servoVertical = servoVertical - .1;
+        }
+        servoCamera.set(servoVertical);
+    }
+
+    /**
+     * This control manages the ultrasound measurement.
+     */
+    private void ultrasoundTick() {
+        sonicSignal = sSonic.getAverageVoltage();
+        sonicSignal = (sonicSignal * 100) / 9.8;
+        log.dbg("Ultrasonic reading: " + String.valueOf(sonicSignal));
+    }
 }
-        
+
